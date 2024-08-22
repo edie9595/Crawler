@@ -18,6 +18,7 @@ int inputIndex = 0;  // Current position in the buffer
 bool inputComplete = false;  // Whether the input string is complete
 
 void setup() {
+
   // Set motor control pins as outputs
   pinMode(MOTOR_LEFT_PWM_FORWARD, OUTPUT);
   pinMode(MOTOR_LEFT_PWM_BACKWARD, OUTPUT);
@@ -28,6 +29,16 @@ void setup() {
   pinMode(MOTOR_RIGHT_PWM_BACKWARD, OUTPUT);
   pinMode(MOTOR_RIGHT_EN_FORWARD, OUTPUT);
   pinMode(MOTOR_RIGHT_EN_BACKWARD, OUTPUT);
+
+  /*
+// Set PWM frequency for Timer1 (pins 9 and 10)
+  setPWMFrequency256(10); // Set to 122.55 Hz
+  setPWMFrequency256(11); // Set to 122.55 Hz
+
+  // Set PWM frequency for Timer0 (pins 5 and 6)
+  setPWMFrequency256(5); // Set to 122.55 Hz
+  setPWMFrequency256(6); // Set to 122.55 Hz
+  */
 
   // Initialize I2C communication
   Wire.begin(I2C_ADDRESS);  // Join I2C bus with address
@@ -124,15 +135,21 @@ void processCommand(char motor, char command, int speed) {
 void controlLeftMotor(char command, int speed) {
   switch (command) {
     case 'F':  // Forward
+      //digitalWrite(MOTOR_LEFT_EN_FORWARD, HIGH);
+      //digitalWrite(MOTOR_LEFT_EN_BACKWARD, LOW);
       digitalWrite(MOTOR_LEFT_EN_FORWARD, HIGH);
-      digitalWrite(MOTOR_LEFT_EN_BACKWARD, LOW);
-      analogWrite(MOTOR_LEFT_PWM_FORWARD, speed);
+      digitalWrite(MOTOR_LEFT_EN_BACKWARD, HIGH);
       analogWrite(MOTOR_LEFT_PWM_BACKWARD, 0);
+      delay(10);
+      analogWrite(MOTOR_LEFT_PWM_FORWARD, speed);
       break;
     case 'B':  // Backward
-      digitalWrite(MOTOR_LEFT_EN_FORWARD, LOW);
+      //digitalWrite(MOTOR_LEFT_EN_FORWARD, LOW);
+      //digitalWrite(MOTOR_LEFT_EN_BACKWARD, HIGH);
+      digitalWrite(MOTOR_LEFT_EN_FORWARD, HIGH);
       digitalWrite(MOTOR_LEFT_EN_BACKWARD, HIGH);
       analogWrite(MOTOR_LEFT_PWM_FORWARD, 0);
+      delay(10);
       analogWrite(MOTOR_LEFT_PWM_BACKWARD, speed);
       break;
     case 'S':  // Stop
@@ -148,14 +165,20 @@ void controlRightMotor(char command, int speed) {
   switch (command) {
     case 'F':  // Forward
       digitalWrite(MOTOR_RIGHT_EN_FORWARD, HIGH);
-      digitalWrite(MOTOR_RIGHT_EN_BACKWARD, LOW);
-      analogWrite(MOTOR_RIGHT_PWM_FORWARD, speed);
+      digitalWrite(MOTOR_RIGHT_EN_BACKWARD, HIGH);
+      //digitalWrite(MOTOR_RIGHT_EN_BACKWARD, LOW);
       analogWrite(MOTOR_RIGHT_PWM_BACKWARD, 0);
+      delay(10);
+      analogWrite(MOTOR_RIGHT_PWM_FORWARD, speed);
+
       break;
     case 'B':  // Backward
-      digitalWrite(MOTOR_RIGHT_EN_FORWARD, LOW);
+      //digitalWrite(MOTOR_RIGHT_EN_FORWARD, LOW);
+      //digitalWrite(MOTOR_RIGHT_EN_BACKWARD, HIGH);
+      digitalWrite(MOTOR_RIGHT_EN_FORWARD, HIGH);
       digitalWrite(MOTOR_RIGHT_EN_BACKWARD, HIGH);
       analogWrite(MOTOR_RIGHT_PWM_FORWARD, 0);
+      delay(10);
       analogWrite(MOTOR_RIGHT_PWM_BACKWARD, speed);
       break;
     case 'S':  // Stop
@@ -172,4 +195,42 @@ void stopMotors() {
   controlLeftMotor('S', 0);
   controlRightMotor('S', 0);
   Serial.println("All motors stopped.");
+}
+
+// Function to set PWM frequency for a specific pin
+void setPWMFrequency(int pin, int frequency) {
+  int prescaler;
+  if (frequency < 31)       prescaler = 0x05;  // Prescale = 1024
+  else if (frequency < 62)  prescaler = 0x04;  // Prescale = 256
+  else if (frequency < 250) prescaler = 0x03;  // Prescale = 64
+  else if (frequency < 1000) prescaler = 0x02; // Prescale = 8
+  else                     prescaler = 0x01;  // Prescale = 1 (no prescaling)
+
+  // Set Timer1 to the desired frequency
+  TCCR1B = TCCR1B & 0b11111000 | prescaler;
+
+  int16_t topValue = (16000000 / (frequency * 2 * (1 << (prescaler - 1)))) - 1;
+  ICR1 = topValue; // Set the TOP value for Timer1
+  TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11);
+  TCCR1B = (1 << WGM13) | (1 << WGM12) | (TCCR1B & 0b11111000 | prescaler);
+
+  // Set Timer0 for PWM pins 5 and 6
+  if (pin == 5 || pin == 6) {
+    TCCR0B = (TCCR0B & 0b11111000) | prescaler;
+  }
+}
+
+// Function to set PWM frequency for Timer1 and Timer0
+void setPWMFrequency256(int pin) {
+  // Set Timer1 for pins 9 and 10
+  if (pin == 10 || pin == 11) {
+    TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS12);  // Mode 14 (fast PWM), Prescaler 256
+    ICR1 = 504;  // Set TOP value for 122.55 Hz
+  }
+
+  // Set Timer0 for pins 5 and 6
+  if (pin == 5 || pin == 6) {
+    TCCR0B = (TCCR0B & 0b11111000) | 0x04;  // Prescaler 256
+    OCR0A = 124;  // Set TOP value for 122.55 Hz (for pins 5 and 6)
+  }
 }
